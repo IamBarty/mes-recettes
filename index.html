@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mes Recettes</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        #search-box { width: 100%; padding: 12px; font-size: 16px; margin-bottom: 20px; }
+        .recipe-card { border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 5px; }
+        .recipe-title { font-weight: bold; color: #333; }
+        .recipe-meta { color: #666; font-size: 14px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>📖 Mes Recettes</h1>
+    <input type="text" id="search-box" placeholder="Rechercher une recette...">
+    <div id="results"></div>
+
+    <script>
+        let recipes = [];
+        
+        // Chargement du JSON
+        fetch('recipes.json')
+            .then(r => r.json())
+            .then(data => {
+                recipes = data;
+                displayRecipes(recipes);
+            });
+
+        // Affichage des recettes
+        function displayRecipes(list) {
+            const container = document.getElementById('results');
+            container.innerHTML = list.length 
+                ? list.map(r => `
+                    <div class="recipe-card">
+                        <div class="recipe-title">${r.titre || r.title}</div>
+                        <div class="recipe-meta">${r.magazine || ''} • ${r.page || ''}</div>
+                    </div>`).join('')
+                : '<p>Aucune recette trouvée.</p>';
+        }
+
+        // Recherche en temps réel
+        document.getElementById('search-box').addEventListener('input', e => {
+            const term = e.target.value.toLowerCase();
+            const filtered = recipes.filter(r => 
+                (r.titre && r.titre.toLowerCase().includes(term)) ||
+                (r.ingredients && r.ingredients.toLowerCase().includes(term))
+            );
+            displayRecipes(filtered);
+        });
+    </script>
+</body>
+</html>
