@@ -9,28 +9,71 @@
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 50px auto;
+            max-width: 900px;
+            margin: 0 auto;
             padding: 20px;
             background-color: #fafafa;
         }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
         h1 {
             color: #333;
-            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+        .search-container {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
         }
         #search-box {
-            width: 100%;
+            flex: 1;
+            min-width: 250px;
             padding: 15px;
             font-size: 16px;
             border: 2px solid #ddd;
             border-radius: 8px;
-            margin-bottom: 20px;
-            box-sizing: border-box;
             transition: border-color 0.3s;
         }
         #search-box:focus {
             outline: none;
             border-color: #6d4aff;
+        }
+        .filters {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+        .filter-btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .filter-btn:hover {
+            border-color: #6d4aff;
+            background: #f5f0ff;
+        }
+        .filter-btn.active {
+            background: #6d4aff;
+            color: white;
+            border-color: #6d4aff;
+        }
+        #count {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 15px;
         }
         .recipe-card {
             background: white;
@@ -45,28 +88,73 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
+        .recipe-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
         .recipe-title {
             font-weight: bold;
             color: #333;
             font-size: 18px;
-            margin-bottom: 8px;
+            flex: 1;
+        }
+        .recipe-category {
+            background: #e8f4fd;
+            color: #1a73e8;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            white-space: nowrap;
+            margin-left: 10px;
         }
         .recipe-meta {
             color: #666;
             font-size: 14px;
+            line-height: 1.6;
         }
-        .recipe-snippet {
+        .recipe-meta-item {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        .recipe-diets {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .diet-tag {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+        .diet-vegetarian {
+            background: #e6f4ea;
+            color: #137333;
+        }
+        .diet-vegan {
+            background: #e6f4ea;
+            color: #137333;
+        }
+        .diet-gluten-free {
+            background: #fef7e0;
+            color: #f9a825;
+        }
+        .recipe-chef {
             color: #888;
             font-size: 13px;
             margin-top: 8px;
-            font-style: italic;
         }
-        #count {
-            color: #888;
-            font-size: 14px;
-            margin-bottom: 15px;
+        #results {
+            margin-top: 20px;
         }
         .loading {
+            text-align: center;
+            color: #888;
+            padding: 40px;
+        }
+        .no-results {
             text-align: center;
             color: #888;
             padding: 40px;
@@ -74,8 +162,23 @@
     </style>
 </head>
 <body>
-    <h1>📖 Mes Recettes</h1>
-    <input type="text" id="search-box" placeholder="Rechercher par nom, ingrédient, tag..." autofocus>
+    <header>
+        <h1>📖 Mes Recettes</h1>
+        <div class="subtitle">Magazines & Livres de Cuisine</div>
+    </header>
+    
+    <div class="search-container">
+        <input type="text" id="search-box" placeholder="Rechercher par nom, source, chef..." autofocus>
+    </div>
+    
+    <div class="filters">
+        <span>Filtres:</span>
+        <button class="filter-btn active" data-filter="all">Tout</button>
+        <button class="filter-btn" data-filter="vegetarian">Végétarien</button>
+        <button class="filter-btn" data-filter="vegan">Vegan</button>
+        <button class="filter-btn" data-filter="glutenfree">Sans gluten</button>
+    </div>
+    
     <div id="count"></div>
     <div id="results">
         <div class="loading">Chargement des recettes...</div>
@@ -84,20 +187,22 @@
     <script>
         let recipes = [];
         let fuse;
+        let currentFilter = 'all';
 
-        // Configuration de Fuse.js
+        // Configuration de Fuse.js adaptée à votre structure JSON
         const fuseOptions = {
             keys: [
-                { name: 'titre', weight: 0.4 },      // Titre très important
-                { name: 'ingredients', weight: 0.3 }, // Ingrédients
-                { name: 'tags', weight: 0.2 },       // Tags/catégories
-                { name: 'magazine', weight: 0.05 },   // Source
-                { name: 'notes', weight: 0.05 }      // Notes supplémentaires
+                { name: 'name', weight: 0.5 },              // Nom de la recette (très important)
+                { name: 'sourceName', weight: 0.2 },         // Magazine/source
+                { name: 'issueNumber', weight: 0.15 },      // Numéro de l'édition
+                { name: 'category', weight: 0.1 },          // Catégorie
+                { name: 'chefs', weight: 0.05 }             // Chefs (tableau)
             ],
-            threshold: 0.4,           // Sensibilité (0 = exact, 0.5 = très tolérant)
-            minMatchCharLength: 2,    // Minimum caractères avant recherche
-            includeScore: true,       // Inclure le score de pertinence
-            ignoreLocation: true      // Chercher dans toute la chaîne
+            threshold: 0.4,
+            minMatchCharLength: 2,
+            includeScore: true,
+            ignoreLocation: true,
+            tokenize: true  // Permet la recherche mot-par-mot
         };
 
         // Chargement du JSON
@@ -107,14 +212,17 @@
                 return response.json();
             })
             .then(data => {
-                recipes = Array.isArray(data) ? data : (data.recipes || data.index || []);
+                // Extraction du tableau de recettes depuis votre structure
+                recipes = Array.isArray(data.recipes) ? data.recipes : [];
                 
                 if (recipes.length === 0) {
                     document.getElementById('results').innerHTML = 
-                        '<p style="text-align:center; color:#888;">Aucune recette trouvée dans le JSON.</p>';
+                        '<p class="no-results">Aucune recette trouvée dans le JSON.</p>';
                     return;
                 }
 
+                console.log(`${recipes.length} recettes chargées (version ${data.version || '?'})`);
+                
                 // Initialisation de Fuse.js
                 fuse = new Fuse(recipes, fuseOptions);
                 
@@ -124,7 +232,7 @@
             .catch(error => {
                 console.error('Erreur:', error);
                 document.getElementById('results').innerHTML = 
-                    '<p style="text-align:center; color:red;">Erreur de chargement du fichier recipes.json</p>';
+                    '<p class="no-results" style="color:red;">Erreur de chargement du fichier recipes.json</p>';
             });
 
         // Affichage des recettes
@@ -142,67 +250,116 @@
             }
 
             if (list.length === 0) {
-                container.innerHTML = '<p style="text-align:center; color:#888;">Aucune recette ne correspond à votre recherche.</p>';
+                container.innerHTML = '<p class="no-results">Aucune recette ne correspond à votre recherche.</p>';
                 return;
             }
 
-            container.innerHTML = list.map((r, idx) => `
+            container.innerHTML = list.map(r => `
                 <div class="recipe-card">
-                    <div class="recipe-title">
-                        ${highlightMatch(r.titre || r.title || 'Sans titre')}
+                    <div class="recipe-header">
+                        <div class="recipe-title">${escapeHtml(r.name || 'Sans nom')}</div>
+                        <div class="recipe-category">${escapeHtml(r.category || '')}</div>
                     </div>
                     <div class="recipe-meta">
-                        ${r.magazine || ''}${r.magazine && r.page ? ' • ' : ''}${r.page ? 'Page ' + r.page : ''}
-                        ${r.livre ? ' • Livre: ' + r.livre : ''}
+                        <span class="recipe-meta-item">
+                            <strong>${escapeHtml(r.sourceName || '')}</strong> 
+                            ${r.sourceType ? `(${escapeHtml(r.sourceType)})` : ''}
+                        </span>
+                        <span class="recipe-meta-item">
+                            ${escapeHtml(r.issueNumber || '')}
+                        </span>
+                        <span class="recipe-meta-item">
+                            Page ${escapeHtml(r.page || '?')}
+                        </span>
                     </div>
-                    ${r.ingredients ? `<div class="recipe-snippet">Ingrédients: ${truncate(r.ingredients, 150)}</div>` : ''}
+                    ${r.chefs && r.chefs.length > 0 ? `<div class="recipe-chef">Chef: ${r.chefs.map(c => escapeHtml(c)).join(', ')}</div>` : ''}
+                    <div class="recipe-diets">
+                        ${r.isVegetarian ? '<span class="diet-tag diet-vegetarian">🌱 Végétarien</span>' : ''}
+                        ${r.isVegan ? '<span class="diet-tag diet-vegan">🌿 Vegan</span>' : ''}
+                        ${r.isGlutenFree ? '<span class="diet-tag diet-gluten-free">⚜️ Sans gluten</span>' : ''}
+                    </div>
                 </div>
             `).join('');
         }
 
-        // Fonction pour tronquer les textes longs
-        function truncate(str, maxLength) {
-            if (!str || str.length <= maxLength) return str;
-            return str.substring(0, maxLength) + '...';
+        // Fonction pour échapper le HTML (sécurité XSS)
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = String(text);
+            return div.innerHTML;
         }
 
-        // Mise en évidence des correspondances (optionnel)
-        function highlightMatch(text) {
-            const term = document.getElementById('search-box').value.trim();
-            if (!term || !text) return text || 'Sans titre';
-            
-            const regex = new RegExp(`(${escapeRegex(term)})`, 'gi');
-            return text.replace(regex, '<mark>$1</mark>');
-        }
-
-        // Échapper les caractères spéciaux pour regex
-        function escapeRegex(string) {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        }
-
-        // Recherche en temps réel avec debounce
+        // Recherche en temps réel avec filtre actif
         let debounceTimer;
         document.getElementById('search-box').addEventListener('input', e => {
             clearTimeout(debounceTimer);
             const term = e.target.value.trim();
             
-            // Délai de 150ms pour éviter trop de requêtes pendant la frappe
             debounceTimer = setTimeout(() => {
                 if (!fuse) return;
                 
-                const results = term.length > 0 
+                let results = term.length > 0 
                     ? fuse.search(term).map(r => r.item)
-                    : recipes;
+                    : [...recipes];
+                
+                // Appliquer le filtre régime alimentaire si actif
+                if (currentFilter !== 'all') {
+                    results = results.filter(r => {
+                        switch(currentFilter) {
+                            case 'vegetarian': return r.isVegetarian === true;
+                            case 'vegan': return r.isVegan === true;
+                            case 'glutenfree': return r.isGlutenFree === true;
+                            default: return true;
+                        }
+                    });
+                }
                 
                 displayRecipes(results, recipes.length);
             }, 150);
         });
 
-        // Support des touches clavier (Échap efface la recherche)
+        // Gestion des boutons de filtre
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Mise à jour de l'état visuel
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // Activation du filtre
+                currentFilter = btn.dataset.filter;
+                
+                // Réexécution de la recherche avec le nouveau filtre
+                const searchTerm = document.getElementById('search-box').value.trim();
+                if (!fuse) return;
+                
+                let results = searchTerm.length > 0 
+                    ? fuse.search(searchTerm).map(r => r.item)
+                    : [...recipes];
+                
+                if (currentFilter !== 'all') {
+                    results = results.filter(r => {
+                        switch(currentFilter) {
+                            case 'vegetarian': return r.isVegetarian === true;
+                            case 'vegan': return r.isVegan === true;
+                            case 'glutenfree': return r.isGlutenFree === true;
+                            default: return true;
+                        }
+                    });
+                }
+                
+                displayRecipes(results, recipes.length);
+            });
+        });
+
+        // Support de la touche Échap pour effacer la recherche
         document.addEventListener('keydown', e => {
             if (e.key === 'Escape') {
                 document.getElementById('search-box').value = '';
                 document.getElementById('search-box').focus();
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                document.querySelector('[data-filter="all"]').classList.add('active');
+                currentFilter = 'all';
                 displayRecipes(recipes, recipes.length);
             }
         });
