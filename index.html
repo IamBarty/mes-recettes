@@ -4,50 +4,207 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mes Recettes</title>
+    <!-- Fuse.js pour la recherche floue -->
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        #search-box { width: 100%; padding: 12px; font-size: 16px; margin-bottom: 20px; }
-        .recipe-card { border: 1px solid #ddd; padding: 15px; margin-bottom: 10px; border-radius: 5px; }
-        .recipe-title { font-weight: bold; color: #333; }
-        .recipe-meta { color: #666; font-size: 14px; margin-top: 5px; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #fafafa;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        #search-box {
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        #search-box:focus {
+            outline: none;
+            border-color: #6d4aff;
+        }
+        .recipe-card {
+            background: white;
+            border: 1px solid #eee;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .recipe-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .recipe-title {
+            font-weight: bold;
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+        .recipe-meta {
+            color: #666;
+            font-size: 14px;
+        }
+        .recipe-snippet {
+            color: #888;
+            font-size: 13px;
+            margin-top: 8px;
+            font-style: italic;
+        }
+        #count {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .loading {
+            text-align: center;
+            color: #888;
+            padding: 40px;
+        }
     </style>
 </head>
 <body>
     <h1>📖 Mes Recettes</h1>
-    <input type="text" id="search-box" placeholder="Rechercher une recette...">
-    <div id="results"></div>
+    <input type="text" id="search-box" placeholder="Rechercher par nom, ingrédient, tag..." autofocus>
+    <div id="count"></div>
+    <div id="results">
+        <div class="loading">Chargement des recettes...</div>
+    </div>
 
     <script>
         let recipes = [];
-        
+        let fuse;
+
+        // Configuration de Fuse.js
+        const fuseOptions = {
+            keys: [
+                { name: 'titre', weight: 0.4 },      // Titre très important
+                { name: 'ingredients', weight: 0.3 }, // Ingrédients
+                { name: 'tags', weight: 0.2 },       // Tags/catégories
+                { name: 'magazine', weight: 0.05 },   // Source
+                { name: 'notes', weight: 0.05 }      // Notes supplémentaires
+            ],
+            threshold: 0.4,           // Sensibilité (0 = exact, 0.5 = très tolérant)
+            minMatchCharLength: 2,    // Minimum caractères avant recherche
+            includeScore: true,       // Inclure le score de pertinence
+            ignoreLocation: true      // Chercher dans toute la chaîne
+        };
+
         // Chargement du JSON
         fetch('recipes.json')
-            .then(r => r.json())
+            .then(response => {
+                if (!response.ok) throw new Error('Erreur de chargement');
+                return response.json();
+            })
             .then(data => {
-                recipes = data;
-                displayRecipes(recipes);
+                recipes = Array.isArray(data) ? data : (data.recipes || data.index || []);
+                
+                if (recipes.length === 0) {
+                    document.getElementById('results').innerHTML = 
+                        '<p style="text-align:center; color:#888;">Aucune recette trouvée dans le JSON.</p>';
+                    return;
+                }
+
+                // Initialisation de Fuse.js
+                fuse = new Fuse(recipes, fuseOptions);
+                
+                // Afficher toutes les recettes au démarrage
+                displayRecipes(recipes, recipes.length);
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                document.getElementById('results').innerHTML = 
+                    '<p style="text-align:center; color:red;">Erreur de chargement du fichier recipes.json</p>';
             });
 
         // Affichage des recettes
-        function displayRecipes(list) {
+        function displayRecipes(list, total = null) {
             const container = document.getElementById('results');
-            container.innerHTML = list.length 
-                ? list.map(r => `
-                    <div class="recipe-card">
-                        <div class="recipe-title">${r.titre || r.title}</div>
-                        <div class="recipe-meta">${r.magazine || ''} • ${r.page || ''}</div>
-                    </div>`).join('')
-                : '<p>Aucune recette trouvée.</p>';
+            const countEl = document.getElementById('count');
+            
+            // Compteur de résultats
+            if (total !== null && list.length !== total) {
+                countEl.textContent = `${list.length} résultat(s) sur ${total}`;
+            } else if (total !== null) {
+                countEl.textContent = `${total} recette(s)`;
+            } else {
+                countEl.textContent = '';
+            }
+
+            if (list.length === 0) {
+                container.innerHTML = '<p style="text-align:center; color:#888;">Aucune recette ne correspond à votre recherche.</p>';
+                return;
+            }
+
+            container.innerHTML = list.map((r, idx) => `
+                <div class="recipe-card">
+                    <div class="recipe-title">
+                        ${highlightMatch(r.titre || r.title || 'Sans titre')}
+                    </div>
+                    <div class="recipe-meta">
+                        ${r.magazine || ''}${r.magazine && r.page ? ' • ' : ''}${r.page ? 'Page ' + r.page : ''}
+                        ${r.livre ? ' • Livre: ' + r.livre : ''}
+                    </div>
+                    ${r.ingredients ? `<div class="recipe-snippet">Ingrédients: ${truncate(r.ingredients, 150)}</div>` : ''}
+                </div>
+            `).join('');
         }
 
-        // Recherche en temps réel
+        // Fonction pour tronquer les textes longs
+        function truncate(str, maxLength) {
+            if (!str || str.length <= maxLength) return str;
+            return str.substring(0, maxLength) + '...';
+        }
+
+        // Mise en évidence des correspondances (optionnel)
+        function highlightMatch(text) {
+            const term = document.getElementById('search-box').value.trim();
+            if (!term || !text) return text || 'Sans titre';
+            
+            const regex = new RegExp(`(${escapeRegex(term)})`, 'gi');
+            return text.replace(regex, '<mark>$1</mark>');
+        }
+
+        // Échapper les caractères spéciaux pour regex
+        function escapeRegex(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // Recherche en temps réel avec debounce
+        let debounceTimer;
         document.getElementById('search-box').addEventListener('input', e => {
-            const term = e.target.value.toLowerCase();
-            const filtered = recipes.filter(r => 
-                (r.titre && r.titre.toLowerCase().includes(term)) ||
-                (r.ingredients && r.ingredients.toLowerCase().includes(term))
-            );
-            displayRecipes(filtered);
+            clearTimeout(debounceTimer);
+            const term = e.target.value.trim();
+            
+            // Délai de 150ms pour éviter trop de requêtes pendant la frappe
+            debounceTimer = setTimeout(() => {
+                if (!fuse) return;
+                
+                const results = term.length > 0 
+                    ? fuse.search(term).map(r => r.item)
+                    : recipes;
+                
+                displayRecipes(results, recipes.length);
+            }, 150);
+        });
+
+        // Support des touches clavier (Échap efface la recherche)
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                document.getElementById('search-box').value = '';
+                document.getElementById('search-box').focus();
+                displayRecipes(recipes, recipes.length);
+            }
         });
     </script>
 </body>
